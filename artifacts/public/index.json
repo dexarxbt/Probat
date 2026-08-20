@@ -1,0 +1,83 @@
+{
+  "generatedAt": "2026-08-20T17:40:27.175Z",
+  "audits": [
+    {
+      "id": "aud_final-judge-smoke_810584a1",
+      "projectSlug": "final-judge-smoke",
+      "status": "completed",
+      "targetUrl": "http://127.0.0.1:4321/",
+      "claimCount": 4,
+      "verified": 1,
+      "disproved": 0,
+      "legacyEvidence": 0,
+      "blocked": 0,
+      "unverifiable": 2,
+      "updatedAt": "2026-08-20T17:32:21.586Z"
+    },
+    {
+      "id": "aud_packaged-demo-smoke_fe3d9a8f",
+      "projectSlug": "packaged-demo-smoke",
+      "status": "draft",
+      "targetUrl": "http://127.0.0.1:4321/",
+      "claimCount": 4,
+      "verified": 0,
+      "disproved": 0,
+      "legacyEvidence": 0,
+      "blocked": 0,
+      "unverifiable": 2,
+      "updatedAt": "2026-08-20T00:13:38.655Z"
+    },
+    {
+      "id": "aud_typed-integrity-smoke_caa735df",
+      "projectSlug": "typed-integrity-smoke",
+      "status": "blocked",
+      "targetUrl": "http://127.0.0.1:4321/",
+      "claimCount": 4,
+      "verified": 0,
+      "disproved": 0,
+      "legacyEvidence": 0,
+      "blocked": 1,
+      "unverifiable": 2,
+      "updatedAt": "2026-08-19T22:28:18.878Z"
+    },
+    {
+      "id": "aud_integrity-smoke_6ada973d",
+      "projectSlug": "integrity-smoke",
+      "status": "blocked",
+      "targetUrl": "http://127.0.0.1:4321/",
+      "claimCount": 4,
+      "verified": 0,
+      "disproved": 0,
+      "legacyEvidence": 0,
+      "blocked": 1,
+      "unverifiable": 1,
+      "updatedAt": "2026-08-19T17:10:20.404Z"
+    },
+    {
+      "id": "aud_example-domain_69833e3e",
+      "projectSlug": "example-domain",
+      "status": "blocked",
+      "targetUrl": "https://example.com/",
+      "claimCount": 4,
+      "verified": 0,
+      "disproved": 0,
+      "legacyEvidence": 0,
+      "blocked": 1,
+      "unverifiable": 1,
+      "updatedAt": "2026-08-19T16:45:28.358Z"
+    },
+    {
+      "id": "aud_hardened-example_b488313d",
+      "projectSlug": "hardened-example",
+      "status": "blocked",
+      "targetUrl": "https://example.com/",
+      "claimCount": 4,
+      "verified": 0,
+      "disproved": 0,
+      "legacyEvidence": 0,
+      "blocked": 1,
+      "unverifiable": 1,
+      "updatedAt": "2026-08-19T16:45:26.865Z"
+    }
+  ]
+}

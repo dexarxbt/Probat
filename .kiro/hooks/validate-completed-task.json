@@ -1,0 +1,15 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Validate Completed Task",
+      "trigger": "PostTaskExec",
+      "description": "Runs strict type checking, integrity regression tests, and a production build after a completed Kiro spec task.",
+      "action": {
+        "type": "command",
+        "command": "npm run check; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; npm test; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; npm run build",
+        "timeout": 180
+      }
+    }
+  ]
+}

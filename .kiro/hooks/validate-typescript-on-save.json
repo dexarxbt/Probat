@@ -1,0 +1,16 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Validate TypeScript on Save",
+      "trigger": "PostFileSave",
+      "description": "Runs strict TypeScript validation whenever a backend TypeScript source file is saved.",
+      "matcher": "^src/.*\\.ts$",
+      "action": {
+        "type": "command",
+        "command": "npm run check",
+        "timeout": 120
+      }
+    }
+  ]
+}

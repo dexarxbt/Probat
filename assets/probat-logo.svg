@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-labelledby="probat-logo-title probat-logo-description">
+  <title id="probat-logo-title">Probat</title>
+  <desc id="probat-logo-description">A geometric P with a verified proof point.</desc>
+  <path d="M16 10h38c19.5 0 32 11.8 32 29.5S73.5 69 54 69H35v17H16V10Zm19 17v25h18c9.3 0 15-4.7 15-12.5S62.3 27 53 27H35Z" fill="#171714" stroke="#f3f2ec" stroke-width="2" stroke-linejoin="round"/>
+  <circle cx="53" cy="39.5" r="8.5" fill="#d8ff65" stroke="#171714" stroke-width="2"/>
+  <path d="m49 39.5 2.7 2.7 5.6-6.3" fill="none" stroke="#171714" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

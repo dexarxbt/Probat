@@ -1,0 +1,26 @@
+node_modules/
+dist/
+coverage/
+.env
+.env.*
+!.env.example
+
+# Local runtime state
+data/
+artifacts/private/
+
+# Kane credentials, local sessions, sealed evidence packs, and generated execution output
+.testmuai/variables/
+.testmuai/evidence/
+.context/sessions/
+kane-tests/**/output-*/
+
+# Generated local review reports; canonical product evidence lives in artifacts/public
+semantic-review/
+
+# Editor and OS noise
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.log

@@ -1,0 +1,31 @@
+{
+  "id": "rcpt_18751727-de18-4362-9fe3-930a7e70daa3",
+  "auditId": "aud_final-judge-smoke_810584a1",
+  "claimId": "clm_c2d87afd9898",
+  "claimQuote": "The page title contains \"Example Domain\".",
+  "citation": {
+    "locator": "fixtures/example/README.md",
+    "lineStart": 7,
+    "lineEnd": 7,
+    "heading": "Product claims"
+  },
+  "verdict": "verified",
+  "sourceHash": "5920984a47a52fffb640cca53b99438a700db09d17a3af52ddc2fcb6b78c3e70",
+  "targetUrl": "http://127.0.0.1:4321/",
+  "targetFingerprint": "ec3a810d35e34a997afd050c47728fab5f5b56b4665db06e78cacf1b014d1412",
+  "testPath": "kane-tests/final-judge-smoke/the-page-title-contains-example-domain-7afd9898-4ffbd872da419d4f8a1eedf52ebd60cd2d96ea3ee0bd01fc5ac40a20d8ee8f43_test.md",
+  "testHash": "4ffbd872da419d4f8a1eedf52ebd60cd2d96ea3ee0bd01fc5ac40a20d8ee8f43",
+  "kaneRunId": "run_3406dd60-b56f-4828-b2c8-98783ec1e182",
+  "kaneTestUrl": null,
+  "issuedAt": "2026-08-20T17:32:20.226Z",
+  "supersedesReceiptId": "rcpt_08b66a1a-3d48-42cb-85a0-8bee0257cac4",
+  "version": 4,
+  "assertionHash": "8f7c57d58854e3d3987909a2de8ea3a6249bcfc75b76ba2a4f973abefa3b4bd9",
+  "assertionPlanHash": "89aa8ce95d7b1f02a2270120959d81e15ee29e96cb7039832ab0b6c916cd3c48",
+  "testFormatVersion": 2,
+  "targetObservationHash": "04cc9a12ac90360fc64eccfb849ace8dd9643bc0869b821a155211df6627eca4",
+  "exitCode": 0,
+  "terminalStatus": "passed",
+  "claimSatisfied": true,
+  "evidenceStatus": "typed-v2"
+}
