@@ -16,6 +16,32 @@ export interface KaneTerminalEvent {
   runDir: string | null;
 }
 
+export type KaneProtocolMode = 'keyed' | 'ordered-unkeyed' | 'invalid';
+export type KaneCorrelationKey =
+  | 'execution_id'
+  | 'run_id'
+  | 'session_id'
+  | 'commit_id'
+  | 'test_id';
+export type KaneCorrelationValue = string | number;
+
+export interface KaneProtocolMetadata {
+  valid: boolean;
+  mode: KaneProtocolMode;
+  error: string | null;
+  runEndCount: number;
+  testMdDoneCount: number;
+  correlationKey?: KaneCorrelationKey;
+  correlationValue?: KaneCorrelationValue;
+}
+
+export interface KaneParseResult {
+  terminal: KaneTerminalEvent | null;
+  progress: ProgressEvent[];
+  invalidOutputLines: number;
+  protocol: KaneProtocolMetadata;
+}
+
 export interface KaneExecution {
   id: string;
   verdict: Verdict;
@@ -23,6 +49,7 @@ export interface KaneExecution {
   terminal: KaneTerminalEvent | null;
   progress: ProgressEvent[];
   invalidOutputLines: number;
+  protocol: KaneProtocolMetadata;
   stderrSummary: string;
   startedAt: string;
   completedAt: string;
@@ -198,6 +225,13 @@ export class KaneAdapter {
         terminal: null,
         progress: [],
         invalidOutputLines: 0,
+        protocol: {
+          valid: false,
+          mode: 'invalid',
+          error: 'Kane CLI did not produce a terminal protocol.',
+          runEndCount: 0,
+          testMdDoneCount: 0,
+        },
         stderrSummary: redactSensitive(
           `Kane CLI could not be started: ${error instanceof Error ? error.message : String(error)}`,
         ).slice(0, 2_000),
@@ -211,6 +245,7 @@ export class KaneAdapter {
       result,
       parsed.terminal,
       parsed.invalidOutputLines,
+      parsed.protocol,
     );
     return {
       id: `run_${randomUUID()}`,
@@ -219,6 +254,7 @@ export class KaneAdapter {
       terminal: parsed.terminal,
       progress: parsed.progress,
       invalidOutputLines: parsed.invalidOutputLines,
+      protocol: parsed.protocol,
       stderrSummary: summarizeStderr(result.stderr),
       startedAt,
       completedAt: new Date().toISOString(),
@@ -226,14 +262,143 @@ export class KaneAdapter {
   }
 }
 
-export function parseKaneOutput(stdout: string): {
-  terminal: KaneTerminalEvent | null;
-  progress: ProgressEvent[];
-  invalidOutputLines: number;
-} {
+const CORRELATION_IDENTIFIER_NAMESPACES: ReadonlyArray<{
+  key: KaneCorrelationKey;
+  aliases: readonly [string, string];
+}> = [
+  { key: 'execution_id', aliases: ['execution_id', 'executionId'] },
+  { key: 'run_id', aliases: ['run_id', 'runId'] },
+  { key: 'session_id', aliases: ['session_id', 'sessionId'] },
+  { key: 'commit_id', aliases: ['commit_id', 'commitId'] },
+  { key: 'test_id', aliases: ['test_id', 'testId'] },
+];
+
+interface CorrelationIdentifiers {
+  values: Map<KaneCorrelationKey, KaneCorrelationValue>;
+  error: string | null;
+}
+
+interface CorrelationResult {
+  mode: Exclude<KaneProtocolMode, 'invalid'> | 'invalid';
+  error: string | null;
+  correlationKey?: KaneCorrelationKey;
+  correlationValue?: KaneCorrelationValue;
+}
+
+function readCorrelationIdentifiers(value: Record<string, unknown>): CorrelationIdentifiers {
+  const values = new Map<KaneCorrelationKey, KaneCorrelationValue>();
+
+  for (const namespace of CORRELATION_IDENTIFIER_NAMESPACES) {
+    const presentAliases = namespace.aliases.filter((alias) =>
+      Object.prototype.hasOwnProperty.call(value, alias),
+    );
+    if (presentAliases.length === 0) continue;
+
+    const namespaceValues: KaneCorrelationValue[] = [];
+    for (const alias of presentAliases) {
+      const identifier = value[alias];
+      if (
+        !(
+          (typeof identifier === 'string' && identifier.length > 0) ||
+          (typeof identifier === 'number' && Number.isFinite(identifier))
+        )
+      ) {
+        return {
+          values,
+          error: `Terminal identifier ${alias} must be a non-empty string or finite number.`,
+        };
+      }
+      namespaceValues.push(identifier);
+    }
+
+    const first = namespaceValues[0];
+    if (
+      first === undefined ||
+      namespaceValues.some((identifier) => identifier !== first)
+    ) {
+      return {
+        values,
+        error: `Terminal identifier aliases for ${namespace.key} disagree.`,
+      };
+    }
+    values.set(namespace.key, first);
+  }
+
+  return { values, error: null };
+}
+
+function correlateTerminalEvents(
+  runEnd: Record<string, unknown>,
+  testMdDone: Record<string, unknown>,
+): CorrelationResult {
+  const runIdentifiers = readCorrelationIdentifiers(runEnd);
+  if (runIdentifiers.error) return { mode: 'invalid', error: runIdentifiers.error };
+  const doneIdentifiers = readCorrelationIdentifiers(testMdDone);
+  if (doneIdentifiers.error) return { mode: 'invalid', error: doneIdentifiers.error };
+
+  const runKeys = [...runIdentifiers.values.keys()];
+  const doneKeys = [...doneIdentifiers.values.keys()];
+  const hasAnyIdentifiers = runKeys.length > 0 || doneKeys.length > 0;
+
+  if (!hasAnyIdentifiers) return { mode: 'ordered-unkeyed', error: null };
+  if (
+    runKeys.length !== doneKeys.length ||
+    runKeys.some((key, index) => doneKeys[index] !== key)
+  ) {
+    return {
+      mode: 'invalid',
+      error: 'Terminal events must carry exactly the same identifier namespaces.',
+    };
+  }
+
+  for (const key of runKeys) {
+    if (runIdentifiers.values.get(key) !== doneIdentifiers.values.get(key)) {
+      return {
+        mode: 'invalid',
+        error: `Terminal events disagree on ${key}.`,
+      };
+    }
+  }
+
+  const correlationKey = runKeys[0];
+  const correlationValue = correlationKey === undefined
+    ? undefined
+    : runIdentifiers.values.get(correlationKey);
+  return {
+    mode: 'keyed',
+    error: null,
+    ...(correlationKey === undefined ? {} : { correlationKey }),
+    ...(correlationValue === undefined ? {} : { correlationValue }),
+  };
+}
+
+function parseRunEnd(value: Record<string, unknown>): KaneTerminalEvent {
+  return {
+    status: stringValue(value.status, 'unknown'),
+    summary: stringValue(value.summary, ''),
+    reason: stringValue(value.reason, ''),
+    durationSeconds: numberValue(value.duration),
+    credits: numberValue(value.credits_consumed) ?? numberValue(value.credits),
+    testUrl: nullableUrl(value.test_url),
+    claimSatisfied: claimSatisfiedValue(value),
+    sessionDir: nullableString(value.session_dir),
+    runDir: nullableString(value.run_dir),
+  };
+}
+
+export function parseKaneOutput(stdout: string): KaneParseResult {
   const progress: ProgressEvent[] = [];
-  let latestRunEnd: KaneTerminalEvent | null = null;
-  let terminal: KaneTerminalEvent | null = null;
+  let state: 'awaiting-run-end' | 'awaiting-test-md-done' | 'complete' =
+    'awaiting-run-end';
+  let runEnd: KaneTerminalEvent | null = null;
+  let runEndRecord: Record<string, unknown> | null = null;
+  let candidateTerminal: KaneTerminalEvent | null = null;
+  let protocolError: string | null = null;
+  let protocolMode: KaneProtocolMode = 'invalid';
+  let correlationKey: KaneCorrelationKey | undefined;
+  let correlationValue: KaneCorrelationValue | undefined;
+  let runEndCount = 0;
+  let testMdDoneCount = 0;
   let invalidOutputLines = 0;
 
   for (const rawLine of stdout.split(/\r?\n/)) {
@@ -250,29 +415,53 @@ export function parseKaneOutput(stdout: string): {
       invalidOutputLines += 1;
       continue;
     }
+
     if (value.type === 'run_end') {
-      latestRunEnd = {
-        status: stringValue(value.status, 'unknown'),
-        summary: stringValue(value.summary, ''),
-        reason: stringValue(value.reason, ''),
-        durationSeconds: numberValue(value.duration),
-        credits: numberValue(value.credits_consumed) ?? numberValue(value.credits),
-        testUrl: nullableUrl(value.test_url),
-        claimSatisfied: claimSatisfiedValue(value),
-        sessionDir: nullableString(value.session_dir),
-        runDir: nullableString(value.run_dir),
-      };
+      runEndCount += 1;
+      if (state === 'awaiting-run-end') {
+        runEnd = parseRunEnd(value);
+        runEndRecord = value;
+        state = 'awaiting-test-md-done';
+      } else if (state === 'awaiting-test-md-done') {
+        protocolError ??=
+          'Expected test_md_done after run_end; received another run_end.';
+      } else {
+        protocolError ??= 'Received a terminal event after protocol completion.';
+      }
       continue;
     }
-    if (value.type === 'test_md_done' && latestRunEnd) {
-      terminal = {
-        ...latestRunEnd,
-        status: stringValue(value.overall_status, 'unknown'),
-        durationSeconds: numberValue(value.duration_s) ?? latestRunEnd.durationSeconds,
-        testUrl: nullableUrl(value.share_url) ?? latestRunEnd.testUrl,
-      };
+
+    if (value.type === 'test_md_done') {
+      testMdDoneCount += 1;
+      if (state === 'awaiting-run-end') {
+        protocolError ??= 'Received test_md_done before run_end.';
+      } else if (state === 'awaiting-test-md-done') {
+        if (!runEnd || !runEndRecord) {
+          protocolError ??= 'Missing run_end data before test_md_done.';
+          continue;
+        }
+        const doneStatus = stringValue(value.overall_status, 'unknown');
+        candidateTerminal = {
+          ...runEnd,
+          status: doneStatus,
+          durationSeconds: numberValue(value.duration_s) ?? runEnd.durationSeconds,
+          testUrl: nullableUrl(value.share_url) ?? runEnd.testUrl,
+        };
+        const correlation = correlateTerminalEvents(runEndRecord, value);
+        protocolMode = correlation.mode;
+        protocolError ??= correlation.error;
+        if (runEnd.status !== doneStatus) {
+          protocolError ??= 'Terminal events disagree on status.';
+        }
+        correlationKey = correlation.correlationKey;
+        correlationValue = correlation.correlationValue;
+        state = 'complete';
+      } else {
+        protocolError ??= 'Received a terminal event after protocol completion.';
+      }
       continue;
     }
+
     if (typeof value.step === 'number' && typeof value.status === 'string') {
       progress.push({
         step: Math.max(1, Math.trunc(value.step)),
@@ -282,15 +471,48 @@ export function parseKaneOutput(stdout: string): {
     }
   }
 
-  return { terminal, progress, invalidOutputLines };
+  if (protocolError === null && (runEndCount !== 1 || testMdDoneCount !== 1)) {
+    protocolError =
+      `Expected exactly one run_end followed by exactly one test_md_done; received ` +
+      `${runEndCount} run_end and ${testMdDoneCount} test_md_done events.`;
+  }
+  if (protocolError === null && candidateTerminal === null) {
+    protocolError = 'Kane terminal protocol did not complete.';
+  }
+
+  const valid = protocolError === null;
+  const protocol: KaneProtocolMetadata = {
+    valid,
+    mode: valid ? protocolMode : 'invalid',
+    error: protocolError,
+    runEndCount,
+    testMdDoneCount,
+    ...(valid && correlationKey !== undefined ? { correlationKey } : {}),
+    ...(valid && correlationValue !== undefined ? { correlationValue } : {}),
+  };
+
+  return {
+    terminal: valid ? candidateTerminal : null,
+    progress,
+    invalidOutputLines,
+    protocol,
+  };
 }
 
 export function classifyKaneResult(
   result: ProcessResult,
   terminal: KaneTerminalEvent | null,
   invalidOutputLines = 0,
+  protocol?: KaneProtocolMetadata,
 ): Verdict {
-  if (result.timedOut || result.exitCode === 3 || invalidOutputLines > 0) return 'blocked';
+  if (
+    result.timedOut ||
+    result.exitCode === 3 ||
+    invalidOutputLines > 0 ||
+    protocol?.valid === false
+  ) {
+    return 'blocked';
+  }
   if (!terminal || indicatesAutomationFailure(terminal.summary, terminal.reason)) return 'blocked';
   if (
     result.exitCode === 0 &&

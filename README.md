@@ -1,225 +1,233 @@
 <p align="center">
-  <img src="./assets/probat-logo.svg" width="96" height="96" alt="Probat logo — a geometric P with a verified proof point">
+  <img src="./assets/probat-logo.svg" width="96" height="96" alt="Probat logo">
 </p>
 
 <h1 align="center">Probat</h1>
 <p align="center"><strong>Documentation, with evidence.</strong></p>
-
-Probat turns a sentence in a README into a browser result that can be traced back to the exact source, target revision, assertion plan, test bytes, and Kane execution that produced it.
-
-A claim does not become true because a test printed green. Probat preserves the quotation and citation, compiles only supported language into a constrained assertion, observes the deployed revision, runs immutable test bytes through Kane, and issues a receipt only when every binding still agrees.
+<p align="center">
+  A local-first verification tool that turns browser-checkable README claims into<br>
+  constrained Kane tests, fail-closed verdicts, and source-bound Proof Receipts.
+</p>
 
 <p align="center">
-  <a href="#open-the-interface"><strong>Open the interface</strong></a> ·
-  <a href="#how-kane-is-used"><strong>Kane execution model</strong></a> ·
-  <a href="#how-kiro-shaped-the-system"><strong>Kiro workflow</strong></a>
+  <a href="#quick-start">Quick start</a> ·
+  <a href="#verification-model">Verification model</a> ·
+  <a href="#proof-receipts">Proof Receipts</a> ·
+  <a href="#interfaces">Interfaces</a> ·
+  <a href="#security-and-privacy">Security</a>
 </p>
 
 ---
 
-## Open the interface
+## Why Probat
 
-Probat is local-first. The product UI, Fastify API, JSON store, and deterministic target run on your machine.
+Documentation makes promises about software, but those promises are rarely connected to executable evidence. A passing browser test alone is not enough: without the original quotation, source content hash, target identity, immutable test bytes, and runner outcome, the result is difficult to audit or reproduce.
 
-**Requirements:** Node.js 20+, npm, Git, a Kane-supported browser, and the Kane CLI for live browser verification.
+Probat creates that chain of custody. It:
+
+- preserves each exact README quotation and source location;
+- compiles supported prose into a closed, typed browser assertion;
+- binds execution to an observed deployment manifest and independently fetched entrypoint;
+- runs content-addressed Markdown tests through [Kane CLI](https://www.lambdatest.com/kane-cli/);
+- issues an immutable receipt only when the source, target, assertion, test, and terminal result agree;
+- publishes inspected JSON projections while keeping local evidence and credentials private.
+
+Probat answers one narrow question:
+
+> Did a real browser run demonstrate this exact README assertion against this identified target using these exact test bytes?
+
+It is not an AI opinion, a performance benchmark, or a security certification.
+
+## Quick start
+
+### Requirements
+
+- Node.js 20 or newer
+- npm and Git
+- Kane CLI 0.8.4, authentication, and a supported browser for live execution
 
 ```powershell
 npm ci
 npm run validate
+npm install -g @testmuai/kane-cli@0.8.4
+kane-cli login
+npm run doctor
 ```
 
-Start the deterministic application in terminal one:
+`doctor` exits with code `2` when Kane, authentication, or the runner is unavailable. That indicates setup state—not a disproved product claim.
+
+### Run the complete local demo
 
 ```powershell
 npm run demo
 ```
 
-Start Probat in terminal two:
+This starts the Probat UI/API and deterministic browser target in one process. By default:
+
+- Product UI: [http://127.0.0.1:4310/ui/](http://127.0.0.1:4310/ui/)
+- API root: [http://127.0.0.1:4310/](http://127.0.0.1:4310/) (redirects to the UI)
+- Browser target: [http://127.0.0.1:4321/](http://127.0.0.1:4321/)
+- Deployment manifest: [http://127.0.0.1:4321/.well-known/probat-manifest.json](http://127.0.0.1:4321/.well-known/probat-manifest.json)
+
+Press `Ctrl+C` once to stop both servers. To use different ports in PowerShell:
 
 ```powershell
-npm run dev
+$env:PROBAT_PORT="4410"
+$env:DEMO_TARGET_PORT="4421"
+npm run demo
 ```
 
-Open **[http://127.0.0.1:4310/ui/](http://127.0.0.1:4310/ui/)**.
+The New audit form receives the actual runtime target URL. `npm run dev` starts Probat alone; `npm run demo:target` starts only the deterministic target.
 
-The interface is not a separate frontend project. It is a same-origin, dependency-free product surface served by Fastify with a strict Content Security Policy. From it you can:
+## Verification model
 
-- ingest a workspace README or supported public GitHub Markdown URL;
-- inspect exact claims, citations, assertion kinds, and hashes;
-- approve, reject, or mark each claim unverifiable;
-- run Kane with explicit execution options;
-- compare test hashes before and after a run;
-- refresh source/target/test freshness independently from verdict;
-- inspect append-only run history and receipt supersession.
+Probat uses five explicit stages:
 
-The demo target is available at `http://127.0.0.1:4321`. It serves an observable marker at `/.well-known/probat-revision` with the value `probat-demo-v1`.
+| Stage | Responsibility | Bound evidence |
+|---|---|---|
+| **Cite** | Preserve the statement exactly as written. | Quotation, heading, line range, and README content hash. An available Git fingerprint is retained as provenance metadata, not a receipt binding. |
+| **Constrain** | Compile supported prose into a typed plan. | Assertion kind, literal operand, quotation hash, plan hash. |
+| **Observe** | Read a strict same-origin manifest and independently fetch its entrypoint. | Origin, revision, manifest hash, entrypoint URL and hash. |
+| **Run** | Execute immutable test bytes through Kane. | Content-addressed `_test.md`, pre/post hashes, process and terminal result. |
+| **Receipt** | Commit evidence only when every binding agrees. | Verdict tuple, run ID, source/target/test hashes, lineage. |
 
-## One claim, end to end
+Human review decides whether a claim may execute. Review cannot rewrite the quotation, replace the expected literal, or weaken the generated test.
 
-The fixture contains this exact statement:
+### Supported assertions
 
-```text
-The page title contains "Example Domain".
-```
-
-Probat processes it in five explicit stages:
-
-1. **Cite** — retain the source locator, exact quotation, line range, README hash, and available Git fingerprint.
-2. **Constrain** — compile the quotation into `title_contains("Example Domain")`; unsupported prose remains `unverifiable`.
-3. **Observe** — fetch the target's same-origin revision marker and bind its response bytes to the audit.
-4. **Run** — create a content-addressed Kane `_test.md`, hash it, execute it, and hash it again after completion.
-5. **Receipt** — append a receipt only when the process exit, terminal status, structured claim result, and every proof binding agree.
-
-No review action can replace the README quotation or supply an easier expected result.
-
-## How Kane is used
-
-Probat uses Kane as the browser execution boundary, while keeping verdict policy inside deterministic TypeScript code.
-
-### The generated test is constrained
-
-Only two assertion forms are currently accepted:
+Probat deliberately accepts six exact forms:
 
 ```text
 The page title contains "<literal>".
 The page displays a link labeled "<literal>".
+The page displays a heading labeled "<literal>".
+The page displays the text "<literal>".
+The page displays a button labeled "<literal>".
+The page URL path is "/<canonical-path>".
 ```
 
-The full README sentence is never handed to the browser agent as an instruction. Probat compiles a typed assertion plan, hashes it, and places only the literal operand into a fixed Kane test template as base64-encoded data. The resulting file is content-addressed and create-only.
+Title and link assertions retain immutable test format 2. Heading, text, button, and path assertions use additive format 3. Unsupported or subjective statements remain visible as `unverifiable`; they are never converted into free-form agent instructions.
 
-### The process boundary is explicit
+Generated tests are committed under `kane-tests/<project>/`:
 
-Kane is spawned with an argument array and shell interpolation disabled. Scripted runs always include `--agent`. `--author`, `--retry`, and `--push` are passed only when the user deliberately selects those official Kane modes.
+```text
+<claim-slug>-<claim-id>-<sha256>_test.md
+```
 
-A terminal sentence is not enough to mint evidence. Probat requires:
+The literal operand is encoded as data inside a fixed, versioned template. Probat rejects conflicting bytes at an existing content-addressed path.
 
-- a real process exit;
-- a `run_end` event;
-- a matching `test_md_done` event;
-- one unambiguous structured `claim_satisfied` value;
-- agreement between exit code, overall status, and claim result;
-- unchanged source, target marker, assertion plan, and test hash after execution.
+### Target binding
 
-The only receipt-bearing terminal tuples are:
+A target must expose strict JSON at `/.well-known/probat-manifest.json`:
 
-| Verdict | Exit | Terminal | `claimSatisfied` |
+```json
+{
+  "version": 2,
+  "revision": "deployment-revision",
+  "entrypoint": "/"
+}
+```
+
+The entrypoint must be root-relative, same-origin, traversal-free, and have no query or fragment. Probat hashes the exact manifest response and independently fetched entrypoint bytes. The resulting v3 fingerprint binds the target origin, declared revision, manifest, and entrypoint; it does not claim to hash every deployed asset.
+
+### Kane execution boundary
+
+A scripted run is equivalent to:
+
+```text
+kane-cli testmd run <test-path> --agent --url <target-url> --timeout <seconds>
+```
+
+Probat constructs an argument array and starts Kane with shell interpolation disabled. `--agent` is mandatory. Official `--headless`, `--author`, `--retry`, and `--push` modes are included only when explicitly selected.
+
+Probat parses Kane's NDJSON defensively and requires one coherent terminal sequence. Only these tuples can produce product verdicts:
+
+| Verdict | Process exit | Terminal status | `claimSatisfied` |
 |---|---:|---|---:|
 | `verified` | `0` | `passed` | `true` |
 | `disproved` | `1` | `failed` | `false` |
 
-Timeouts, setup exits, malformed output, missing completion, changed bindings, `automation_bug`, and `agent_misstep` are `blocked`. They are never converted into product contradictions.
+Timeouts, setup failures, malformed or ambiguous terminal output, missing completion, automation errors, and changed bindings are `blocked`. They are never converted into product failures.
 
-### Attempt history is not cleaned up
-
-Every run receives its own identity. A new receipt supersedes the previous receipt; it does not edit it. Recovery journals carry the exact predecessor audit and can apply only one coherent run/receipt append. Unsafe journals are quarantined rather than exported.
-
-That distinction matters in the preserved evidence chain:
-
-| Record | What happened |
-|---|---|
-| `rcpt_2aab3cb8-714d-4e0b-9612-4393cbc8f52f` | Fresh authored attempt returned a false tuple, while Kane identified an `automation_bug/agent_misstep`. The record is preserved; current classification blocks this failure mode. |
-| `rcpt_08b66a1a-3d48-42cb-85a0-8bee0257cac4` | Official retry completed with a coherent verified tuple. |
-| `rcpt_18751727-de18-4362-9fe3-930a7e70daa3` | Current pushed replay completed with exit `0`, terminal `passed`, and `claimSatisfied: true`. |
-
-All attempts bind the unchanged test hash:
-
-```text
-4ffbd872da419d4f8a1eedf52ebd60cd2d96ea3ee0bd01fc5ac40a20d8ee8f43
-```
-
-The authored-attempt Kane share remains publicly inspectable:
-
-[Open the preserved Kane result](https://test-manager.lambdatest.com/projects/01M0DA9RYXM0X55Q9PJNR4ZKZK/test-cases/01M0G2MJMFPM1GGS1WX7MBX4MK/dashboard/share/US_7557I02V979TTVOCZTOYLRMFK3CBYD3F5LH0QEG3UFBIMCQ47F649IKY8NLT0DZF)
-
-## Proof receipts
-
-A v4 receipt binds:
-
-- audit, claim, quotation, and citation;
-- README content hash;
-- typed assertion hash and assertion-plan hash;
-- observed target fingerprint and marker-response hash;
-- immutable test path, format, and content hash;
-- Kane run identity;
-- coherent process exit, terminal status, and structured claim result;
-- superseded receipt identity, when one exists.
-
-Private receipts are create-only. Audit revisions use compare-and-swap. Public projections remove raw Kane prose, progress, credentials, local session directories, and private paths.
-
-Inspect the current sanitized records in [`artifacts/public`](artifacts/public):
-
-- [canonical audit](artifacts/public/audits/aud_final-judge-smoke_810584a1.json)
-- [current receipt](artifacts/public/receipts/rcpt_18751727-de18-4362-9fe3-930a7e70daa3.json)
-- [preserved authored attempt](artifacts/public/receipts/rcpt_2aab3cb8-714d-4e0b-9612-4393cbc8f52f.json)
+After Kane exits, Probat rechecks the README hash, assertion plan, manifest and entrypoint fingerprint, and test hash. Changed evidence blocks receipt issuance.
 
 ## Verdicts and freshness
 
 | State | Meaning |
 |---|---|
-| `verified` | Kane completed the immutable test with the exact verified tuple. |
-| `disproved` | Kane completed with the exact contradiction tuple. |
-| `blocked` | Execution or proof prerequisites prevented a valid product verdict. |
-| `unverifiable` | The statement does not compile into an objective supported browser assertion. |
+| `verified` | Kane demonstrated the claim with the exact accepted tuple and unchanged bindings. |
+| `disproved` | A completed Kane run observed the exact contradictory tuple with unchanged bindings. |
+| `blocked` | Setup, execution, protocol, or binding prerequisites prevented a valid verdict. |
+| `unverifiable` | The statement cannot be objectively compiled into a supported browser assertion. |
 | `error` | An internal integrity boundary failed. |
 
-Freshness is separate. A previously verified receipt may become stale when its README, target observation, assertion plan, or test bytes no longer match.
+Freshness is independent from verdict. A verified receipt remains historical evidence, but its source, target, assertion, or test binding can later become stale.
 
-## How Kiro shaped the system
+## Proof Receipts
 
-Kiro was the engineering control plane for Probat, not a one-shot code generator.
+Current policy uses ReceiptV6 for test format 2 and ReceiptV7 for test format 3. A receipt binds:
 
-### Specification before implementation
+- audit, claim, exact quotation, and citation;
+- README content hash; an available Git fingerprint is retained as source provenance metadata but is not bound into the receipt;
+- typed assertion and assertion-plan hashes;
+- target origin, revision, exact manifest hash, and entrypoint URL/hash;
+- immutable test format, canonical hash, and matching pre/post-run hashes;
+- Kane run ID, exact terminal tuple, protocol metadata, and evidence policy;
+- supersession or correction lineage without changing older receipts.
 
-The committed [requirements](.kiro/specs/probat-backend/requirements.md), [design](.kiro/specs/probat-backend/design.md), and [task plan](.kiro/specs/probat-backend/tasks.md) established the source → claim → test → run → receipt lifecycle before the adapters and storage code were written. That kept the Kane integration behind a domain service instead of spreading runner behavior across routes and commands.
+Private receipts are create-only. Audit writes use revision compare-and-swap, verification commits use recoverable journals, and unsafe recovery state is quarantined. New receipts supersede rather than overwrite previous evidence.
 
-### Persistent engineering constraints
+### Published evidence
 
-Kiro steering files encode rules that must survive across sessions:
+[`artifacts/public`](artifacts/public) contains sanitized projections rebuilt from the local authoritative store:
 
-- [product semantics](.kiro/steering/product.md) define verified, disproved, blocked, unverifiable, and freshness;
-- [technical direction](.kiro/steering/tech.md) fixes TypeScript, Fastify, Zod, file-backed storage, and shell-disabled Kane execution;
-- [repository structure](.kiro/steering/structure.md) keeps dependencies pointing inward;
-- [verification integrity](.kiro/steering/verification.md) forbids weakening generated tests, fabricating exits, deleting failed evidence, or publishing raw Kane output.
+- [`index.json`](artifacts/public/index.json) — audit summary and evidence counts;
+- [`audits/`](artifacts/public/audits) — source, target, claim, and run projections;
+- [`receipts/`](artifacts/public/receipts) — immutable receipt projections and lineage.
 
-### Hooks and review loops
+Historical v1-v5 and policy-1 records remain available as legacy evidence. Coherent manifest-bound V6/V7 policy-2 receipts are classified as current policy. Publication strips raw Kane prose, credentials, private storage paths, local session directories, and raw evidence packs.
 
-The committed Kiro hooks run strict TypeScript validation on source changes and the full check → test → build gate after completed work. Semantic review loops found trust-boundary failures that ordinary happy-path testing would miss, including:
+### Latest fresh integration attempt
 
-- mixed v4 terminal tuples accepted field-by-field;
-- receipts that did not match their referenced appended run;
-- recovery journals without exact predecessor ancestry;
-- agent-misstep output misclassified as a product contradiction;
-- public locators capable of leaking local paths;
-- legacy free-form Kane tests that delegated too much interpretation to the agent.
+The latest real Kane attempt is preserved honestly in [`aud_final-submission-fresh_827e20d1`](artifacts/public/audits/aud_final-submission-fresh_827e20d1.json):
 
-Those findings became schema refinements, transaction invariants, quarantine behavior, classifier rules, sanitizers, and regression assertions. The `.kiro` directory is the visible trace of that process.
+- run ID `run_10c2bc3d-7e60-49d1-8e52-cf7de3950f5b`;
+- process exit `0`, but an invalid terminal protocol containing two `run_end` events and one `test_md_done`;
+- identical pre-run and post-run SHA-256 `d30a0b403dde43908a1c8db180cfd87242f4680a079d83fb4ebb054ff81e0e2c`;
+- verdict `blocked` and no receipt issued.
+
+This is distinct from preserved historical verified evidence. A browser-side pass cannot override an ambiguous terminal protocol, and Probat does not retry or weaken the test to manufacture a green result.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-    B[Local browser UI] --> API[Loopback Fastify API]
+    UI[Local browser UI] --> API[Loopback Fastify API]
     CLI[CLI] --> A[AuditService]
     API --> A
     A --> R[README loader]
-    A --> C[Typed claim compiler]
-    A --> T[Content-addressed test generator]
+    A --> C[Claim compiler]
+    A --> T[Test generator]
     A --> O[Target observer]
     A --> K[Kane adapter]
     A --> P[Receipt service]
     A --> S[Revisioned JSON store]
-    K -->|argument array / shell false| KC[Kane CLI]
-    S --> D[(Private data/)]
-    S --> PUB[Sanitized artifacts/public/]
+    K -->|argument array; shell false| KC[Kane CLI]
+    S --> D[(Ignored local data)]
+    S --> PUB[Sanitized public artifacts]
 ```
+
+Dependencies point inward:
 
 ```text
 UI / CLI / API → services → domain / store / adapters
 ```
 
-There is no application database, hosted Probat backend, billing layer, remote font, analytics script, or frontend framework. Live browser execution uses the authenticated Kane service; deterministic validation and preserved records remain runnable without creating new browser evidence.
+The stack is intentionally small: strict TypeScript, Node.js, Fastify, Zod, and file-backed JSON. No application database, cloud Probat service, billing system, or paid API is required.
 
-## CLI
+## Interfaces
+
+### CLI
 
 ```text
 doctor
@@ -233,33 +241,42 @@ receipt --id <id>
 serve [--host 127.0.0.1] [--port 4310]
 ```
 
-Install and authenticate Kane for a live run:
+Examples:
 
 ```powershell
-npm install -g @testmuai/kane-cli@0.8.4
-kane-cli login
-npm run doctor
+npm run probat -- ingest --project example --readme fixtures/example/README.md --target http://127.0.0.1:4321/
+npm run probat -- list
+npm run probat -- show --audit <audit-id>
 ```
 
-`doctor` exits with code `2` when Kane, authentication, or the runner is unavailable. That is setup state, not a product verdict.
-
-## HTTP surface
-
-The server binds only to `127.0.0.1` or `localhost`. It rejects Authorization credentials, non-loopback Host values, and cross-origin browser mutations.
+### HTTP API
 
 | Method | Route | Purpose |
 |---|---|---|
-| GET | `/ui/` | Product interface |
-| GET | `/health` | Process health |
-| GET | `/api/doctor` | Kane readiness |
-| GET / POST | `/api/audits` | List or ingest audits |
-| GET | `/api/audits/:auditId` | Audit detail |
-| PATCH | `/api/audits/:auditId/claims/:claimId` | Claim decision |
-| POST | `/api/audits/:auditId/verify` | Verify one or all eligible claims |
-| POST | `/api/audits/:auditId/freshness` | Re-evaluate bindings |
-| GET | `/api/receipts/:receiptId` | Receipt detail |
+| `GET` | `/ui/` | Product interface. |
+| `GET` | `/health` | Process health. |
+| `GET` | `/api/doctor` | Kane readiness. |
+| `GET`, `POST` | `/api/audits` | List or create audits. |
+| `GET` | `/api/audits/:auditId` | Read an audit. |
+| `PATCH` | `/api/audits/:auditId/claims/:claimId` | Record review. |
+| `POST` | `/api/audits/:auditId/verify` | Verify eligible claims. |
+| `POST` | `/api/audits/:auditId/freshness` | Re-evaluate bindings. |
+| `GET` | `/api/receipts/:receiptId` | Read a receipt. |
 
-The UI renders API values through DOM text nodes, not HTML interpolation. Assets are exact routes protected by a CSP with no inline script, inline style, `eval`, framing, objects, or cross-origin connections.
+The browser UI exposes the same workflow: ingest, inspect citations and hashes, review claims, check Kane readiness, execute approved claims, and inspect run/receipt lineage.
+
+## Security and privacy
+
+- The server binds only to `127.0.0.1` or `localhost`.
+- Foreign Host values, Authorization headers, and cross-origin browser mutations are rejected.
+- The UI uses a strict Content Security Policy and same-origin static assets.
+- API values are rendered with DOM text nodes rather than HTML interpolation.
+- Local README paths and symlinks must resolve inside the workspace.
+- Remote ingestion accepts bounded, credential-free public GitHub Markdown URLs.
+- README content is untrusted data and is never executed.
+- Kane runs without a shell; credentials are redacted from retained summaries.
+- `data/`, `.env*`, `.testmuai/evidence/`, `.testmuai/variables/`, `.context/sessions/`, Kane output directories, and `artifacts/private/` are excluded from Git.
+- Public projections omit raw evidence, local Windows paths, session details, and private runner prose.
 
 ## Validation
 
@@ -269,31 +286,36 @@ npm audit --omit=dev
 npm run doctor
 ```
 
-The deterministic suite does not invoke Kane or manufacture evidence. It covers target observation, constrained claim compilation, Kane terminal parsing, verdict coherence, v4 receipt bindings, transaction recovery, public redaction, UI asset security, loopback Host enforcement, same-origin mutation protection, and Fastify workflow validation.
+`npm run validate` performs strict type checking, the deterministic integrity suite, and a production build. The suite covers constrained assertions, target observation, immutable test formats, terminal parsing, verdict coherence, ReceiptV1-V7 compatibility, journal recovery, lineage, public redaction, UI security, loopback enforcement, and API workflows.
 
-A live Kane run is a separate integration event with a new run identity.
+The deterministic suite does not invoke Kane or fabricate browser evidence. Live Kane verification is a separate integration event with a unique run identity.
 
-## Files and privacy boundary
+To rebuild inspected public projections from local state:
 
-```text
-src/ui           same-origin product interface
-src/domain       Zod records and errors
-src/services     claim, audit, test, and receipt workflows
-src/adapters     Kane and target-observation boundaries
-src/store        atomic revisioned JSON persistence
-src/api          loopback HTTP surface
-kane-tests       persistent content-addressed Kane tests
-artifacts/public inspected publication projections
-data              ignored authoritative local state
-.kiro             specs, steering, and validation hooks
+```powershell
+npm run probat -- list
 ```
 
-Commit-safe: source, `.kiro`, fixtures, persistent `*_test.md` files, and inspected public projections.
+## Scope
 
-Private or generated: `data/`, `.env`, `.testmuai/evidence/`, `.testmuai/variables/`, `.context/sessions/`, `kane-tests/**/output-*/`, `artifacts/private/`, and `semantic-review/`.
+Probat v1.0.0 intentionally does not provide private-repository OAuth, multi-tenancy, billing, cloud Kane execution, arbitrary target-repository code execution, performance benchmarking, or security certification. Live execution depends on Kane installation, authentication, browser support, and runner availability.
 
-Remote README ingestion accepts only bounded, credential-free public GitHub HTTPS Markdown URLs. Local paths and symlinks must resolve inside the workspace. README text is always untrusted data and is never executed.
+## Repository map
 
-## Run the product walkthrough
+```text
+src/ui             same-origin product interface
+src/domain         validated records and shared errors
+src/lib            hashing, process, path, and serialization utilities
+src/services       README, claims, tests, receipts, audits, and freshness
+src/adapters       Kane and target-observation boundaries
+src/store          atomic revisioned JSON persistence
+src/api            Fastify routes and HTTP error mapping
+kane-tests         persistent content-addressed Kane tests
+artifacts/public   inspected, commit-safe projections
+data               ignored authoritative local state
+.kiro              specifications, steering, hooks, and engineering controls
+```
 
-See [docs/DEMO.md](docs/DEMO.md) for the UI-first recording flow and [docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md) for the clean-publication gate.
+## Engineering provenance
+
+The committed [`.kiro`](.kiro) directory records the requirements, architecture, task plan, persistent technical constraints, and validation hooks used to build Probat. These controls keep evidence semantics—especially fail-closed verdicts, immutable tests, shell-disabled Kane execution, and private/public separation—active during development rather than relying on undocumented process.

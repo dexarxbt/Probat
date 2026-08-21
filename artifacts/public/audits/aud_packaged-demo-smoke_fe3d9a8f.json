@@ -4,7 +4,6 @@
   "proofIntegrity": "typed-v2",
   "id": "aud_packaged-demo-smoke_fe3d9a8f",
   "projectSlug": "packaged-demo-smoke",
-  "status": "draft",
   "source": {
     "kind": "local",
     "locator": "fixtures/example/README.md",
@@ -146,5 +145,8 @@
   "runs": [],
   "receiptIds": [],
   "createdAt": "2026-08-20T00:13:38.655Z",
-  "updatedAt": "2026-08-20T00:13:38.655Z"
+  "updatedAt": "2026-08-20T00:13:38.655Z",
+  "reviewStatus": "in-review",
+  "executionStatus": "not-ready",
+  "status": "draft"
 }

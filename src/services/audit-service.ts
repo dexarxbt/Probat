@@ -2,11 +2,17 @@ import { randomUUID } from 'node:crypto';
 import {
   CreateAuditInputSchema,
   ReviewClaimInputSchema,
+  deriveAuditReviewStatus,
+  deriveSettledAuditExecutionStatus,
+  hasObservableTargetBinding,
+  legacyStatusForExecutionStatus,
+  targetObservationHash as observationHashFor,
   type Audit,
   type Claim,
   type CreateAuditInput,
   type KaneRun,
   type Receipt,
+  type ReceiptView,
   type ReviewClaimInput,
 } from '../domain/models.js';
 import { ProbatError } from '../domain/errors.js';
@@ -22,7 +28,10 @@ import {
 } from './claim-extractor.js';
 import type { ReadmeSourceService } from './readme-source.js';
 import type { KaneTestService } from './test-generator.js';
-import type { ReceiptService } from './receipt-service.js';
+import type {
+  ReceiptIssuanceIntent,
+  ReceiptService,
+} from './receipt-service.js';
 
 export interface VerifyOptions {
   headless?: boolean;
@@ -37,7 +46,7 @@ export interface VerifyResult {
   claim: Claim;
   run: KaneRun;
   receipt: Receipt | null;
-  testHashBefore: string;
+  testHashBefore: string | null;
   testHashAfter: string | null;
 }
 
@@ -71,29 +80,41 @@ export class AuditService {
     const observedTarget = input.targetRevision
       ? await this.targets.observe(input.targetUrl, input.targetRevision)
       : null;
+    let target: Audit['target'];
+    if (observedTarget) {
+      const observation = observedTarget.observation;
+      if (observation.kind !== 'deployment-manifest-v2') {
+        throw new ProbatError(
+          'INVALID_STATE',
+          'New target ingestion requires a deployment-manifest-v2 observation.',
+          409,
+        );
+      }
+      target = {
+        url: observation.entrypointUrl,
+        revision: input.targetRevision,
+        fingerprint: observedTarget.fingerprint,
+        fingerprintKind: 'observed-manifest-v3',
+        observation,
+      };
+    } else {
+      target = {
+        url: input.targetUrl,
+        revision: null,
+        fingerprint: targetFingerprint(input.targetUrl, null),
+        fingerprintKind: 'declared-v1',
+        observation: null,
+      };
+    }
     const audit: Audit = {
       version: 1,
       recordRevision: 0,
       proofIntegrity: 'typed-v2',
       id: auditId,
       projectSlug,
-      status: 'draft',
+      ...settledAuditStatuses(claims, target),
       source: loaded.source,
-      target: observedTarget
-        ? {
-            url: input.targetUrl,
-            revision: input.targetRevision,
-            fingerprint: observedTarget.fingerprint,
-            fingerprintKind: 'observed-revision-v2',
-            observation: observedTarget.observation,
-          }
-        : {
-            url: input.targetUrl,
-            revision: null,
-            fingerprint: targetFingerprint(input.targetUrl, null),
-            fingerprintKind: 'declared-v1',
-            observation: null,
-          },
+      target,
       claims,
       runs: [],
       receiptIds: [],
@@ -111,7 +132,7 @@ export class AuditService {
     return this.store.getAudit(id);
   }
 
-  async getReceipt(id: string): Promise<Receipt> {
+  async getReceipt(id: string): Promise<ReceiptView> {
     return this.store.getReceipt(id);
   }
 
@@ -134,11 +155,7 @@ export class AuditService {
           ...audit,
           claims,
           proofIntegrity: summarizeProofIntegrity(claims),
-          status: claims.some(
-            (claim) => claim.reviewStatus === 'approved' && claim.testability === 'testable',
-          )
-            ? 'ready'
-            : 'draft',
+          ...settledAuditStatuses(claims, audit.target),
           updatedAt: new Date().toISOString(),
         },
         audit.recordRevision,
@@ -169,19 +186,20 @@ export class AuditService {
           409,
         );
       }
+      const currentTargetObservation = audit.target.observation;
       if (
         !audit.target.revision ||
-        audit.target.fingerprintKind !== 'observed-revision-v2' ||
-        !audit.target.observation
+        audit.target.fingerprintKind !== 'observed-manifest-v3' ||
+        currentTargetObservation?.kind !== 'deployment-manifest-v2'
       ) {
         throw new ProbatError(
           'INVALID_STATE',
-          'Verification requires a newly ingested target with an observable revision marker at /.well-known/probat-revision.',
+          'Current-policy verification requires a newly ingested target with a valid deployment manifest at /.well-known/probat-manifest.json.',
           409,
         );
       }
       const targetRevision = audit.target.revision;
-      const targetObservationHash = audit.target.observation.responseHash;
+      const targetObservationHash = currentTargetObservation.manifestHash;
       const assertionHash = sha256(claim.quote);
       const compiledAssertion = compileBrowserAssertion(claim.quote);
       const assertionPlanHash = compiledAssertion
@@ -213,7 +231,7 @@ export class AuditService {
       if (
         sourceBefore.source.contentHash !== audit.source.contentHash ||
         targetBefore.fingerprint !== audit.target.fingerprint ||
-        targetBefore.observation.responseHash !== targetObservationHash
+        observationHashFor(targetBefore.observation) !== targetObservationHash
       ) {
         await this.markClaimStale(audit, claimIndex);
         throw new ProbatError(
@@ -223,6 +241,12 @@ export class AuditService {
         );
       }
 
+      const issuanceIntent: ReceiptIssuanceIntent =
+        claim.latestReceiptId === null
+          ? { supersessionReason: 'first' }
+          : claim.freshness === 'stale'
+            ? { supersessionReason: 'freshness-renewal' }
+            : { supersessionReason: 'retry' };
       const generated = await this.tests.ensureTest(audit.projectSlug, claim);
       const preparedClaim: Claim = {
         ...claim,
@@ -238,24 +262,46 @@ export class AuditService {
         {
           ...audit,
           claims: preparedClaims,
-          status: 'running',
+          executionStatus: 'running',
+          status: legacyStatusForExecutionStatus('running'),
           updatedAt: new Date().toISOString(),
         },
         audit.recordRevision,
       );
 
-      const execution = await this.kane.runTest({
-        testPath: generated.absolutePath,
-        targetUrl: audit.target.url,
-        cwd: this.workspaceRoot,
-        ...(options.headless === undefined ? {} : { headless: options.headless }),
-        ...(options.author === undefined ? {} : { author: options.author }),
-        ...(options.retry === undefined ? {} : { retry: options.retry }),
-        ...(options.push === undefined ? {} : { push: options.push }),
-        ...(options.timeoutSeconds === undefined
-          ? {}
-          : { timeoutSeconds: options.timeoutSeconds }),
-      });
+      const preRunTestHash = await this.tests.currentHash(generated.absolutePath);
+      const execution =
+        preRunTestHash === generated.hash
+          ? await this.kane.runTest({
+              testPath: generated.absolutePath,
+              targetUrl: audit.target.url,
+              cwd: this.workspaceRoot,
+              ...(options.headless === undefined ? {} : { headless: options.headless }),
+              ...(options.author === undefined ? {} : { author: options.author }),
+              ...(options.retry === undefined ? {} : { retry: options.retry }),
+              ...(options.push === undefined ? {} : { push: options.push }),
+              ...(options.timeoutSeconds === undefined
+                ? {}
+                : { timeoutSeconds: options.timeoutSeconds }),
+            })
+          : {
+              id: `run_${randomUUID()}`,
+              verdict: 'blocked' as const,
+              exitCode: null,
+              terminal: null,
+              progress: [],
+              invalidOutputLines: 0,
+              protocol: {
+                valid: false,
+                mode: 'invalid' as const,
+                error: 'The immutable test hash did not match immediately before Kane launch.',
+                runEndCount: 0,
+                testMdDoneCount: 0,
+              },
+              stderrSummary: 'Kane was not started because the immutable test binding changed.',
+              startedAt: new Date().toISOString(),
+              completedAt: new Date().toISOString(),
+            };
 
       const postRunTestHash = await this.tests.currentHash(generated.relativePath);
       let postRunSourceHash = 'unavailable';
@@ -269,11 +315,12 @@ export class AuditService {
       try {
         const observed = await this.targets.observe(audit.target.url, targetRevision);
         postRunTargetFingerprint = observed.fingerprint;
-        postRunTargetObservationHash = observed.observation.responseHash;
+        postRunTargetObservationHash = observationHashFor(observed.observation) ?? 'unavailable';
       } catch {
         // Missing target observation blocks receipt issuance below.
       }
       const bindingsCurrent =
+        preRunTestHash === generated.hash &&
         postRunTestHash === generated.hash &&
         postRunSourceHash === audit.source.contentHash &&
         postRunTargetFingerprint === audit.target.fingerprint &&
@@ -301,19 +348,32 @@ export class AuditService {
           : 'Verification bindings changed or became unavailable during execution; no receipt was issued.',
         reason: bindingsCurrent
           ? terminal?.reason || execution.stderrSummary
-          : 'The exact source, observed target revision, assertion, or immutable test hash did not match both preflight and completion.',
+          : 'The exact source, deployment manifest, entrypoint, assertion, or immutable test hash did not match both preflight and completion.',
         durationSeconds: terminal?.durationSeconds ?? null,
         credits: terminal?.credits ?? null,
         testUrl: terminal?.testUrl ?? null,
         testPath: generated.relativePath,
         testHash: generated.hash,
+        testHashBefore: preRunTestHash,
+        testHashAfter: postRunTestHash,
+        testBytesUnchanged:
+          preRunTestHash !== null &&
+          postRunTestHash !== null &&
+          preRunTestHash === postRunTestHash,
+        evidencePolicyVersion: 2,
+        protocol: execution.protocol,
         testFormatVersion: generated.formatVersion,
         assertionHash,
         assertionPlanHash,
         evidenceVersion: 'typed-v2',
         sourceHash: audit.source.contentHash,
         targetFingerprint: audit.target.fingerprint,
+        targetRevision,
         targetObservationHash,
+        targetBindingKind: currentTargetObservation.kind,
+        targetManifestHash: currentTargetObservation.manifestHash,
+        targetEntrypointUrl: currentTargetObservation.entrypointUrl,
+        targetEntrypointHash: currentTargetObservation.entrypointHash,
         progress: execution.progress,
         invalidOutputLines: execution.invalidOutputLines,
         localSessionDir: terminal?.sessionDir ?? null,
@@ -324,7 +384,7 @@ export class AuditService {
 
       let receipt: Receipt | null = null;
       if (run.verdict === 'verified' || run.verdict === 'disproved') {
-        receipt = this.receipts.issue(audit, preparedClaim, run);
+        receipt = this.receipts.issue(audit, preparedClaim, run, issuanceIntent);
       }
       const completedClaim: Claim = {
         ...preparedClaim,
@@ -340,20 +400,28 @@ export class AuditService {
         claims: completedClaims,
         runs: [...audit.runs, run],
         receiptIds: receipt ? [...audit.receiptIds, receipt.id] : audit.receiptIds,
-        status: summarizeAuditStatus(completedClaims),
+        ...settledAuditStatuses(completedClaims, audit.target),
         updatedAt: new Date().toISOString(),
       };
       audit = receipt
         ? await this.store.commitVerification(completedAudit, receipt, audit.recordRevision)
         : await this.store.saveAudit(completedAudit, audit.recordRevision);
 
+      const persistedRun = audit.runs.find((entry) => entry.id === run.id);
+      if (!persistedRun) {
+        throw new ProbatError(
+          'PERSISTENCE_ERROR',
+          'The completed Kane run was not present after persistence.',
+          500,
+        );
+      }
       return {
         audit,
         claim: completedClaim,
-        run,
+        run: persistedRun,
         receipt,
-        testHashBefore: generated.hash,
-        testHashAfter: postRunTestHash,
+        testHashBefore: persistedRun.testHashBefore,
+        testHashAfter: persistedRun.testHashAfter,
       };
     } finally {
       await release();
@@ -386,19 +454,21 @@ export class AuditService {
         currentSourceHash = 'unavailable';
       }
       let currentTargetFingerprint = 'unavailable';
-      if (
-        audit.target.revision &&
-        audit.target.fingerprintKind === 'observed-revision-v2' &&
-        audit.target.observation
-      ) {
+      let currentTargetObservationHash = 'unavailable';
+      if (hasObservableTargetBinding(audit.target) && audit.target.revision) {
         try {
-          currentTargetFingerprint = (
-            await this.targets.observe(audit.target.url, audit.target.revision)
-          ).fingerprint;
+          const observed =
+            audit.target.fingerprintKind === 'observed-revision-v2'
+              ? await this.targets.observeLegacyRevision(audit.target.url, audit.target.revision)
+              : await this.targets.observe(audit.target.url, audit.target.revision);
+          currentTargetFingerprint = observed.fingerprint;
+          currentTargetObservationHash = observationHashFor(observed.observation) ?? 'unavailable';
         } catch {
           currentTargetFingerprint = 'unavailable';
+          currentTargetObservationHash = 'unavailable';
         }
       }
+      const storedTargetObservationHash = observationHashFor(audit.target.observation);
       const claims = await Promise.all(
         audit.claims.map(async (claim) => {
           const currentTestHash = claim.testPath ? await this.tests.currentHash(claim.testPath) : null;
@@ -406,6 +476,7 @@ export class AuditService {
             claim.latestReceiptId &&
               (currentSourceHash !== audit.source.contentHash ||
                 currentTargetFingerprint !== audit.target.fingerprint ||
+                currentTargetObservationHash !== storedTargetObservationHash ||
                 currentTestHash !== claim.testHash ||
                 claim.assertionHash !== sha256(claim.quote) ||
                 !claim.assertion ||
@@ -416,7 +487,12 @@ export class AuditService {
         }),
       );
       return this.store.saveAudit(
-        { ...audit, claims, updatedAt: new Date().toISOString() },
+        {
+          ...audit,
+          claims,
+          ...settledAuditStatuses(claims, audit.target),
+          updatedAt: new Date().toISOString(),
+        },
         audit.recordRevision,
       );
     } finally {
@@ -434,7 +510,12 @@ export class AuditService {
       updatedAt: new Date().toISOString(),
     };
     await this.store.saveAudit(
-      { ...audit, claims, updatedAt: new Date().toISOString() },
+      {
+        ...audit,
+        claims,
+        ...settledAuditStatuses(claims, audit.target),
+        updatedAt: new Date().toISOString(),
+      },
       audit.recordRevision,
     );
   }
@@ -448,15 +529,15 @@ function summarizeProofIntegrity(claims: Claim[]): Audit['proofIntegrity'] {
     : 'legacy-present';
 }
 
-function summarizeAuditStatus(claims: Claim[]): Audit['status'] {
-  const testable = claims.filter(
-    (claim) => claim.reviewStatus === 'approved' && claim.testability === 'testable',
-  );
-  if (testable.some((claim) => claim.verdict === 'blocked' || claim.verdict === 'error')) {
-    return 'blocked';
-  }
-  if (testable.length > 0 && testable.every((claim) => ['verified', 'disproved'].includes(claim.verdict))) {
-    return 'completed';
-  }
-  return testable.length > 0 ? 'ready' : 'draft';
+function settledAuditStatuses(
+  claims: Claim[],
+  target: Audit['target'],
+): Pick<Audit, 'reviewStatus' | 'executionStatus' | 'status'> {
+  const reviewStatus = deriveAuditReviewStatus(claims);
+  const executionStatus = deriveSettledAuditExecutionStatus({ claims, target });
+  return {
+    reviewStatus,
+    executionStatus,
+    status: legacyStatusForExecutionStatus(executionStatus),
+  };
 }

@@ -27,5 +27,15 @@
   "exitCode": 1,
   "terminalStatus": "failed",
   "claimSatisfied": false,
-  "evidenceStatus": "typed-v2"
+  "evidenceStatus": "typed-v2",
+  "policyAssessment": {
+    "assessmentVersion": 1,
+    "validity": "legacy",
+    "basis": "receipt-version",
+    "declaredPolicyVersion": null
+  },
+  "lineageStatus": "superseded",
+  "supersededByReceiptIds": [
+    "rcpt_08b66a1a-3d48-42cb-85a0-8bee0257cac4"
+  ]
 }

@@ -4,7 +4,6 @@
   "proofIntegrity": "legacy-present",
   "id": "aud_integrity-smoke_6ada973d",
   "projectSlug": "integrity-smoke",
-  "status": "blocked",
   "source": {
     "kind": "local",
     "locator": "fixtures/example/README.md",
@@ -151,13 +150,23 @@
       "testUrl": null,
       "testPath": "kane-tests/integrity-smoke/the-page-title-contains-example-domain-81b48712-93aacd2c989206de5e20d56fbd5b400961dcaf675bef17bc3a8ca28cc876ffa5_test.md",
       "testHash": "93aacd2c989206de5e20d56fbd5b400961dcaf675bef17bc3a8ca28cc876ffa5",
+      "testHashBefore": null,
+      "testHashAfter": null,
+      "testBytesUnchanged": null,
+      "evidencePolicyVersion": null,
+      "protocol": null,
       "testFormatVersion": 2,
       "assertionHash": "8f7c57d58854e3d3987909a2de8ea3a6249bcfc75b76ba2a4f973abefa3b4bd9",
       "assertionPlanHash": null,
       "evidenceVersion": "legacy-unbound",
       "sourceHash": "5920984a47a52fffb640cca53b99438a700db09d17a3af52ddc2fcb6b78c3e70",
       "targetFingerprint": "440246d00132b4942209e628eea832fbbc9e41e4e136bf0f7349fa7f40df85f6",
+      "targetRevision": null,
       "targetObservationHash": "3c8d4e6627494a27954f4dd1f0061ae9a85ee2d8b2b548b5ffc77ec71e1267f9",
+      "targetBindingKind": null,
+      "targetManifestHash": null,
+      "targetEntrypointUrl": null,
+      "targetEntrypointHash": null,
       "invalidOutputLines": 0,
       "startedAt": "2026-08-19T17:09:28.803Z",
       "completedAt": "2026-08-19T17:10:18.962Z"
@@ -165,5 +174,8 @@
   ],
   "receiptIds": [],
   "createdAt": "2026-08-19T17:08:27.344Z",
-  "updatedAt": "2026-08-19T17:10:20.404Z"
+  "updatedAt": "2026-08-19T17:10:20.404Z",
+  "reviewStatus": "in-review",
+  "executionStatus": "blocked",
+  "status": "blocked"
 }

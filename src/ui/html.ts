@@ -54,7 +54,7 @@ export const UI_HTML = String.raw`<!doctype html>
       <div class="method-grid">
         <article><span>01</span><h3>Cite</h3><p>Preserve the exact README quotation, line range, and source hash.</p></article>
         <article><span>02</span><h3>Constrain</h3><p>Compile supported prose into a typed plan, never an open-ended agent prompt.</p></article>
-        <article><span>03</span><h3>Observe</h3><p>Bind the target to a same-origin revision marker before and after execution.</p></article>
+        <article><span>03</span><h3>Observe</h3><p>Bind the target origin and revision to a same-origin deployment manifest and independently hashed entrypoint.</p></article>
         <article><span>04</span><h3>Run</h3><p>Execute immutable test bytes through Kane with shell interpolation disabled.</p></article>
         <article><span>05</span><h3>Receipt</h3><p>Append coherent terminal evidence while preserving every prior attempt.</p></article>
       </div>
@@ -69,8 +69,8 @@ export const UI_HTML = String.raw`<!doctype html>
       <p class="intro">Point Probat at a workspace Markdown file or public GitHub README and an observable browser target.</p>
       <label class="field"><span>Project name</span><input name="project" required maxlength="100" autocomplete="off" placeholder="product-docs"></label>
       <label class="field"><span>README source</span><input name="readme" required maxlength="2048" autocomplete="off" value="fixtures/example/README.md"></label>
-      <div class="field-row"><label class="field"><span>Target URL</span><input name="targetUrl" type="url" required value="http://127.0.0.1:4321"></label><label class="field"><span>Revision marker</span><input name="targetRevision" value="probat-demo-v1"></label></div>
-      <div class="note"><b>i</b><p>The target must serve the same value at <code>/.well-known/probat-revision</code>. Missing or changed markers stop verification.</p></div>
+      <div class="field-row"><label class="field"><span>Target URL</span><input name="targetUrl" type="url" required value="http://127.0.0.1:4321"></label><label class="field"><span>Deployment revision</span><input name="targetRevision" value="probat-demo-v1"></label></div>
+      <div class="note"><b>i</b><p>The target must serve strict JSON at <code>/.well-known/probat-manifest.json</code> declaring this revision and a root-relative same-origin HTML entrypoint.</p></div>
       <div class="dialog-actions"><button class="button ghost" type="button" data-close>Cancel</button><button class="button dark" type="submit">Create audit <span>↗</span></button></div>
     </form>
   </dialog>
@@ -89,6 +89,30 @@ export const UI_HTML = String.raw`<!doctype html>
   <div id="busy" class="busy" aria-hidden="true"><i></i></div><div id="toast" class="toast" role="status" aria-live="polite"></div>
 </body>
 </html>`;
+
+export function renderUiHtml(defaultTargetUrl = 'http://127.0.0.1:4321'): string {
+  const target = new URL(defaultTargetUrl);
+  if (
+    (target.protocol !== 'http:' && target.protocol !== 'https:') ||
+    target.username ||
+    target.password
+  ) {
+    throw new Error('The UI default target must be a credential-free HTTP(S) URL.');
+  }
+  const escapedTarget = target.toString().replace(/[&"<>]/g, (character) => {
+    switch (character) {
+      case '&': return '&amp;';
+      case '"': return '&quot;';
+      case '<': return '&lt;';
+      case '>': return '&gt;';
+      default: return character;
+    }
+  });
+  return UI_HTML.replace(
+    'value="http://127.0.0.1:4321"',
+    `value="${escapedTarget}"`,
+  );
+}
 
 export const UI_ICON = String.raw`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-labelledby="probat-logo-title probat-logo-description">
   <title id="probat-logo-title">Probat</title>

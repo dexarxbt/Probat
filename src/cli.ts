@@ -198,7 +198,7 @@ function printJson(value: unknown): void {
 
 function printHelp(): void {
   process.stdout.write(`Probat — README claims backed by Kane proof receipts.
-Targets with --revision must serve that exact value at /.well-known/probat-revision.
+Targets with --revision must serve a strict same-origin deployment manifest at /.well-known/probat-manifest.json.
 
 Commands:
   doctor

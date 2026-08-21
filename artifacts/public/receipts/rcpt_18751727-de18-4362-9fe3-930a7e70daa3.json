@@ -27,5 +27,13 @@
   "exitCode": 0,
   "terminalStatus": "passed",
   "claimSatisfied": true,
-  "evidenceStatus": "typed-v2"
+  "evidenceStatus": "typed-v2",
+  "policyAssessment": {
+    "assessmentVersion": 1,
+    "validity": "legacy",
+    "basis": "receipt-version",
+    "declaredPolicyVersion": null
+  },
+  "lineageStatus": "current",
+  "supersededByReceiptIds": []
 }

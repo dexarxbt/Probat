@@ -162,15 +162,95 @@ export function compileBrowserAssertion(quote: string): BrowserAssertion | null 
         /^The page displays a link labeled “([^”\r\n]{1,200})”\.$/i,
       ],
     },
+    {
+      kind: 'heading_text_present',
+      expressions: [
+        /^The page displays a heading labeled "([^"\r\n]{1,200})"\.$/i,
+        /^The page displays a heading labeled “([^”\r\n]{1,200})”\.$/i,
+      ],
+    },
+    {
+      kind: 'visible_text_present',
+      expressions: [
+        /^The page displays the text "([^"\r\n]{1,200})"\.$/i,
+        /^The page displays the text “([^”\r\n]{1,200})”\.$/i,
+      ],
+    },
+    {
+      kind: 'button_text_present',
+      expressions: [
+        /^The page displays a button labeled "([^"\r\n]{1,200})"\.$/i,
+        /^The page displays a button labeled “([^”\r\n]{1,200})”\.$/i,
+      ],
+    },
+    {
+      kind: 'url_path_equals',
+      expressions: [
+        /^The page URL path is "([^"\r\n]{1,200})"\.$/i,
+        /^The page URL path is “([^”\r\n]{1,200})”\.$/i,
+      ],
+    },
   ];
   for (const pattern of patterns) {
     for (const expression of pattern.expressions) {
       const match = expression.exec(quote);
       const expected = match?.[1]?.trim();
-      if (expected) return { kind: pattern.kind, expected };
+      if (
+        expected &&
+        (pattern.kind !== 'url_path_equals' || isCanonicalRootRelativeUrlPath(expected))
+      ) {
+        return { kind: pattern.kind, expected };
+      }
     }
   }
   return null;
+}
+
+function isCanonicalRootRelativeUrlPath(path: string): boolean {
+  if (
+    !path.startsWith('/') ||
+    path.startsWith('//') ||
+    path.includes('\\') ||
+    path.includes('?') ||
+    path.includes('#') ||
+    /[\u0000-\u001F\u007F]/.test(path) ||
+    path.split('/').some((segment) => segment === '.' || segment === '..')
+  ) {
+    return false;
+  }
+
+  let decoded = path;
+  for (let count = 0; count < 5; count += 1) {
+    let next: string;
+    try {
+      next = decodeURIComponent(decoded);
+    } catch {
+      return false;
+    }
+    if (
+      next.startsWith('//') ||
+      next.includes('\\') ||
+      next.includes('?') ||
+      next.includes('#') ||
+      next.split('/').some((segment) => segment === '.' || segment === '..')
+    ) {
+      return false;
+    }
+    if (next === decoded) break;
+    decoded = next;
+  }
+
+  try {
+    const parsed = new URL(path, 'https://probat.invalid/');
+    return (
+      parsed.origin === 'https://probat.invalid' &&
+      parsed.pathname === path &&
+      parsed.search === '' &&
+      parsed.hash === ''
+    );
+  } catch {
+    return false;
+  }
 }
 
 function normalizeClaim(value: string): string {

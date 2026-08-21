@@ -4,7 +4,6 @@
   "proofIntegrity": "legacy-present",
   "id": "aud_example-domain_69833e3e",
   "projectSlug": "example-domain",
-  "status": "blocked",
   "source": {
     "kind": "local",
     "locator": "fixtures/example/README.md",
@@ -144,13 +143,23 @@
       "testUrl": null,
       "testPath": "kane-tests/example-domain/the-page-title-contains-example-domain-e052eb0b_test.md",
       "testHash": "ac93a30a6e2a7e23d3f51a580a93e50799d8f293e579fb4aaaf173f7fd758207",
+      "testHashBefore": null,
+      "testHashAfter": null,
+      "testBytesUnchanged": null,
+      "evidencePolicyVersion": null,
+      "protocol": null,
       "testFormatVersion": null,
       "assertionHash": null,
       "assertionPlanHash": null,
       "evidenceVersion": "legacy-unbound",
       "sourceHash": "5920984a47a52fffb640cca53b99438a700db09d17a3af52ddc2fcb6b78c3e70",
       "targetFingerprint": "34360ea5fbc2109b3e82a649bdc5cf49b644b6b69d1ccbfd63a81bb868c189b4",
+      "targetRevision": null,
       "targetObservationHash": null,
+      "targetBindingKind": null,
+      "targetManifestHash": null,
+      "targetEntrypointUrl": null,
+      "targetEntrypointHash": null,
       "invalidOutputLines": 0,
       "startedAt": "2026-08-19T16:18:22.883Z",
       "completedAt": "2026-08-19T16:19:03.836Z"
@@ -158,5 +167,8 @@
   ],
   "receiptIds": [],
   "createdAt": "2026-08-19T16:15:59.185Z",
-  "updatedAt": "2026-08-19T16:45:28.358Z"
+  "updatedAt": "2026-08-19T16:45:28.358Z",
+  "reviewStatus": "complete",
+  "executionStatus": "blocked",
+  "status": "blocked"
 }

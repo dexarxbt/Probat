@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import { UI_CLIENT } from './client.js';
-import { UI_HTML, UI_ICON } from './html.js';
+import { UI_ICON, renderUiHtml } from './html.js';
 import { UI_CSS } from './styles.js';
 
 export const UI_CONTENT_SECURITY_POLICY = [
@@ -15,9 +15,14 @@ export const UI_CONTENT_SECURITY_POLICY = [
   "object-src 'none'",
 ].join('; ');
 
-export function registerUiRoutes(app: FastifyInstance): void {
+export function registerUiRoutes(
+  app: FastifyInstance,
+  defaultTargetUrl = 'http://127.0.0.1:4321',
+): void {
   app.get('/ui', async (_request, reply) => reply.redirect('/ui/'));
-  app.get('/ui/', async (_request, reply) => sendAsset(reply, 'text/html; charset=utf-8', UI_HTML));
+  app.get('/ui/', async (_request, reply) =>
+    sendAsset(reply, 'text/html; charset=utf-8', renderUiHtml(defaultTargetUrl)),
+  );
   app.get('/ui/app.css', async (_request, reply) =>
     sendAsset(reply, 'text/css; charset=utf-8', UI_CSS),
   );

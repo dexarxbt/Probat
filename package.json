@@ -20,7 +20,8 @@
     "start": "node dist/cli.js serve",
     "probat": "tsx src/cli.ts",
     "doctor": "tsx src/cli.ts doctor",
-    "demo": "tsx src/demo-target.ts",
+    "demo": "tsx src/demo.ts",
+    "demo:built": "node dist/demo.js",
     "demo:target": "tsx src/demo-target.ts",
     "demo:target:built": "node dist/demo-target.js"
   },

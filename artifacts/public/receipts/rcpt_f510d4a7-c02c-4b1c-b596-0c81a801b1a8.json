@@ -25,6 +25,16 @@
   "testFormatVersion": 2,
   "targetObservationHash": "04cc9a12ac90360fc64eccfb849ace8dd9643bc0869b821a155211df6627eca4",
   "evidenceStatus": "typed-v2",
+  "policyAssessment": {
+    "assessmentVersion": 1,
+    "validity": "legacy",
+    "basis": "receipt-version",
+    "declaredPolicyVersion": null
+  },
+  "lineageStatus": "superseded",
+  "supersededByReceiptIds": [
+    "rcpt_efcad77a-52d5-499d-90eb-8f546b073b6b"
+  ],
   "exitCode": null,
   "terminalStatus": null,
   "claimSatisfied": null

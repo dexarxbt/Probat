@@ -18,7 +18,14 @@ const VerifyBodySchema = VerifyOptionsSchema.extend({
 const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 const LOOPBACK_AUTHORITY = /^(?:127\.0\.0\.1|localhost)(?::\d{1,5})?$/i;
 
-export function buildServer(container: ProbatContainer): FastifyInstance {
+export interface ServerOptions {
+  defaultTargetUrl?: string;
+}
+
+export function buildServer(
+  container: ProbatContainer,
+  options: ServerOptions = {},
+): FastifyInstance {
   const app = Fastify({
     logger: {
       level: process.env.PROBAT_LOG_LEVEL ?? 'info',
@@ -83,15 +90,9 @@ export function buildServer(container: ProbatContainer): FastifyInstance {
     return payload;
   });
 
-  registerUiRoutes(app);
+  registerUiRoutes(app, options.defaultTargetUrl);
 
-  app.get('/', async () => ({
-    name: 'Probat API',
-    version: '1.0.0',
-    description: 'README claims backed by Kane proof receipts.',
-    endpoints: '/api',
-    interface: '/ui/',
-  }));
+  app.get('/', async (_request, reply) => reply.redirect('/ui/'));
 
   app.get('/health', async () => ({ status: 'ok', time: new Date().toISOString() }));
 

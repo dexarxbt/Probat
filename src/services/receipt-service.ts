@@ -1,12 +1,56 @@
 import { randomUUID } from 'node:crypto';
-import type { Audit, Claim, KaneRun, Receipt } from '../domain/models.js';
+import { z } from 'zod';
+import type {
+  Audit,
+  Claim,
+  KaneRun,
+  ReceiptV6,
+  ReceiptV7,
+} from '../domain/models.js';
+import { ReceiptV6Schema, ReceiptV7Schema } from '../domain/models.js';
 import { indicatesAutomationFailure } from '../adapters/kane-adapter.js';
 import { ProbatError } from '../domain/errors.js';
 import { sha256, stableJson } from '../lib/hash.js';
 import { compileBrowserAssertion } from './claim-extractor.js';
+import { testFormatVersionForAssertion } from './test-generator.js';
+
+const ReceiptIssuanceIntentSchema = z.discriminatedUnion('supersessionReason', [
+  z.object({ supersessionReason: z.literal('first') }).strict(),
+  z.object({ supersessionReason: z.literal('retry') }).strict(),
+  z.object({ supersessionReason: z.literal('freshness-renewal') }).strict(),
+  z
+    .object({
+      supersessionReason: z.literal('correction'),
+      correctsReceiptId: z.string().trim().min(1),
+      correctionReason: z.string().trim().min(1).max(2_000),
+    })
+    .strict(),
+]);
+
+export type ReceiptIssuanceIntent = z.infer<typeof ReceiptIssuanceIntentSchema>;
 
 export class ReceiptService {
-  issue(audit: Audit, claim: Claim, run: KaneRun): Receipt {
+  issue(
+    audit: Audit,
+    claim: Claim,
+    run: KaneRun,
+    rawIntent: ReceiptIssuanceIntent,
+  ): ReceiptV6 | ReceiptV7 {
+    const intent = ReceiptIssuanceIntentSchema.parse(rawIntent);
+    const hasPredecessor = claim.latestReceiptId !== null;
+    if (
+      (intent.supersessionReason === 'first' && hasPredecessor) ||
+      (intent.supersessionReason !== 'first' && !hasPredecessor)
+    ) {
+      throw new ProbatError(
+        'INVALID_STATE',
+        intent.supersessionReason === 'first'
+          ? 'First receipt issuance requires a claim with no predecessor.'
+          : 'Non-first receipt issuance requires the claim latest receipt as predecessor.',
+        409,
+      );
+    }
+
     const automationFailure = indicatesAutomationFailure(run.summary, run.reason);
     const coherentVerifiedRun =
       !automationFailure &&
@@ -43,9 +87,17 @@ export class ReceiptService {
     const assertionHash = sha256(claim.quote);
     const compiledAssertion = compileBrowserAssertion(claim.quote);
     const assertionPlanHash = compiledAssertion ? sha256(stableJson(compiledAssertion)) : null;
-    const observationHash = audit.target.observation?.responseHash ?? null;
+    const mappedTestFormatVersion = compiledAssertion
+      ? testFormatVersionForAssertion(compiledAssertion)
+      : null;
+    const targetObservation = audit.target.observation;
+    const observationHash =
+      targetObservation?.kind === 'deployment-manifest-v2'
+        ? targetObservation.manifestHash
+        : null;
     if (
-      audit.target.fingerprintKind !== 'observed-revision-v2' ||
+      audit.target.fingerprintKind !== 'observed-manifest-v3' ||
+      targetObservation?.kind !== 'deployment-manifest-v2' ||
       !observationHash ||
       claim.auditId !== audit.id ||
       run.auditId !== audit.id ||
@@ -61,11 +113,26 @@ export class ReceiptService {
       run.evidenceVersion !== 'typed-v2' ||
       run.sourceHash !== audit.source.contentHash ||
       run.targetFingerprint !== audit.target.fingerprint ||
+      run.targetRevision !== audit.target.revision ||
       run.targetObservationHash !== observationHash ||
+      run.targetBindingKind !== targetObservation.kind ||
+      run.targetManifestHash !== targetObservation.manifestHash ||
+      run.targetEntrypointUrl !== targetObservation.entrypointUrl ||
+      run.targetEntrypointHash !== targetObservation.entrypointHash ||
       run.testPath !== claim.testPath ||
       run.testHash !== claim.testHash ||
-      run.testFormatVersion !== 2 ||
-      claim.testFormatVersion !== 2 ||
+      run.testFormatVersion !== mappedTestFormatVersion ||
+      run.evidencePolicyVersion !== 2 ||
+      run.testHashBefore !== run.testHash ||
+      run.testHashAfter !== run.testHash ||
+      run.testBytesUnchanged !== true ||
+      !run.protocol ||
+      !run.protocol.valid ||
+      run.protocol.mode === 'invalid' ||
+      run.protocol.error !== null ||
+      run.protocol.runEndCount !== 1 ||
+      run.protocol.testMdDoneCount !== 1 ||
+      claim.testFormatVersion !== mappedTestFormatVersion ||
       claim.freshness !== 'current'
     ) {
       throw new ProbatError(
@@ -75,9 +142,10 @@ export class ReceiptService {
       );
     }
 
-    return {
-      version: 4,
+    const receipt = {
+      version: mappedTestFormatVersion === 2 ? 6 : 7,
       evidenceStatus: 'typed-v2',
+      evidencePolicyVersion: 2,
       id: `rcpt_${randomUUID()}`,
       auditId: audit.id,
       claimId: claim.id,
@@ -90,14 +158,31 @@ export class ReceiptService {
       targetUrl: audit.target.url,
       targetFingerprint: run.targetFingerprint,
       targetObservationHash: observationHash,
+      targetBindingKind: targetObservation.kind,
+      targetRevision: audit.target.revision,
+      targetManifestHash: targetObservation.manifestHash,
+      targetEntrypointUrl: targetObservation.entrypointUrl,
+      targetEntrypointHash: targetObservation.entrypointHash,
       testPath: run.testPath,
       testHash: run.testHash,
-      testFormatVersion: 2,
+      testHashBefore: run.testHashBefore,
+      testHashAfter: run.testHashAfter,
+      testBytesUnchanged: run.testBytesUnchanged,
+      testFormatVersion: mappedTestFormatVersion,
+      protocol: run.protocol,
       kaneRunId: run.id,
       kaneTestUrl: run.testUrl,
       summary: run.summary,
       issuedAt: run.completedAt,
       supersedesReceiptId: claim.latestReceiptId,
+      supersessionReason: intent.supersessionReason,
+      correctsReceiptId:
+        intent.supersessionReason === 'correction' ? intent.correctsReceiptId : null,
+      correctionReason:
+        intent.supersessionReason === 'correction' ? intent.correctionReason : null,
     };
+    return mappedTestFormatVersion === 2
+      ? ReceiptV6Schema.parse(receipt)
+      : ReceiptV7Schema.parse(receipt);
   }
 }

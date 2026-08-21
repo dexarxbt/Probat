@@ -5,6 +5,12 @@ import { resolve } from 'node:path';
 export const DEMO_TARGET_HOST = '127.0.0.1';
 export const DEMO_TARGET_PORT = 4321;
 export const DEMO_TARGET_REVISION = 'probat-demo-v1';
+export const DEMO_TARGET_ENTRYPOINT = '/';
+export const DEMO_TARGET_MANIFEST = `${JSON.stringify({
+  version: 2,
+  revision: DEMO_TARGET_REVISION,
+  entrypoint: DEMO_TARGET_ENTRYPOINT,
+})}\n`;
 
 const DEMO_HTML = `<!doctype html>
 <html lang="en">
@@ -39,6 +45,16 @@ export function createDemoTarget(): Server {
       return;
     }
 
+    if (pathname === '/.well-known/probat-manifest.json') {
+      send(
+        response,
+        200,
+        'application/json',
+        DEMO_TARGET_MANIFEST,
+        method === 'HEAD',
+      );
+      return;
+    }
     if (pathname === '/.well-known/probat-revision') {
       send(
         response,
@@ -120,7 +136,8 @@ if (isMainModule()) {
   listenDemoTarget(port)
     .then(({ server, url }) => {
       process.stdout.write(`Probat demo target listening on ${url}\n`);
-      process.stdout.write(`Revision marker: ${url}/.well-known/probat-revision = ${DEMO_TARGET_REVISION}\n`);
+      process.stdout.write(`Deployment manifest: ${url}/.well-known/probat-manifest.json\n`);
+      process.stdout.write(`Legacy revision marker: ${url}/.well-known/probat-revision = ${DEMO_TARGET_REVISION}\n`);
       const shutdown = (): void => {
         server.close(() => process.exit(0));
       };
